@@ -3,20 +3,32 @@ Q     = require 'q'
 merge = require './merge'
 {compress, decompress} = require './compressor'
 
+defaultoptions =
+  ack: false
+  prefetchCount: 1
+
 module.exports = class RpcBackend
     constructor: (@amqpc) ->
 
-    serve: (exname, topic, callback) =>
-        Q.all( [
-            @amqpc.exchange exname, { type: 'topic', durable: true, autoDelete: false}
+    serve: (exname, topic, options, callback) =>
+        if typeof options is 'function'
+          callback = options
+          options = defaultoptions
+        else
+          options = merge({}, defaultoptions, options)
+
+        Q.all([
+            @amqpc.exchange exname, { type: 'topic', durable: true, autoDelete: false }
             @amqpc.exchange ''
             @amqpc.queue "#{exname}.#{topic}", { durable: true, autoDelete: false }
         ]).spread (ex, defaultex, queue) =>
             queue.bind ex, topic
-            queue.subscribe @_mkcallback(defaultex, callback)
+            handler = @_mkcallback(defaultex, callback)
+            queue.subscribe options, @_mkcallback(defaultex, callback, options.ack, queue)
+
 
     # Creates a callback funtion which respects replyTo/correlationId
-    _mkcallback: (exchange, handler) ->
+    _mkcallback: (exchange, handler, ack, queue) ->
         (msg, headers, info) ->
             # no replyTo, no rpc
             return unless info.replyTo?
@@ -72,8 +84,11 @@ module.exports = class RpcBackend
                 .then ->
                     # then send the result
                     exchange.publish info.replyTo, res, opts
+                .then ->
+                    queue.shift(false) if ack
             .fail (err) ->
                 log.error err
+                queue.shift(true) if ack
                 exchange.publish info.replyTo, { error: err.message }, opts
             .fail (err) ->
                 # we need to be careful to catch any errors caused by
