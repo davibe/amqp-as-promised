@@ -24,5 +24,5 @@ module.exports = (conf = {}) ->
         serve: rpcBackend.serve
         shutdown: amqpc.shutdown
         local: amqpc.local
-        connection: aqpc.conn
+        connection: amqpc.conn
     }
