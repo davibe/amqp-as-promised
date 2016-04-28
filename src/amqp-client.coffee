@@ -121,4 +121,4 @@ module.exports = (conf) ->
         .done()
         def.promise
 
-    return _self = { exchange, queue, bind, unbind, shutdown, local }
+    return _self = { exchange, queue, bind, unbind, shutdown, local, conn }
